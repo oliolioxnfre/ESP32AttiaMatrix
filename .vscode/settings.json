@@ -1,0 +1,6 @@
+{
+    "clangd.arguments": [
+        "--compile-commands-dir=/Users/oliverking/Documents/PlatformIO/Projects/ESP32AttiaMatrix/.cache/clangd",
+        "--query-driver=/Users/oliverking/.platformio/packages/toolchain-*/bin/*,/Users/oliverking/.platformio/packages/tool-*/bin/*"
+    ]
+}
