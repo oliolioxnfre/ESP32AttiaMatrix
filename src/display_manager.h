@@ -29,7 +29,7 @@ public:
 
   void begin() {
     _display.begin();
-    _display.setIntensity(15); // Moderate brightness (0 to 15)
+    _display.setIntensity(1); // Moderate brightness (0 to 15)
     _display.displayClear();
     
     // Register our custom characters
