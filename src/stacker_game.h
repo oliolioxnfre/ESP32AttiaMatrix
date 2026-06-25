@@ -88,7 +88,7 @@ public:
     _btnWasPressed = false;
     _lastFlashTime = 0;
     _flashState = true;
-    Serial.println("Stacker Game Reset (Double Buffering Active).");
+    Serial.println("Stacker Game Reset (Double-layer stacking + buffering active).");
   }
 
   void handleInput(bool btnPressed) {
@@ -108,17 +108,19 @@ public:
   }
 
   void placeBlock() {
-    Serial.print("Placed block at vertical row ");
-    Serial.println(_currentRow);
+    Serial.print("Placed double block at vertical rows ");
+    Serial.print(_currentRow);
+    Serial.print(" and ");
+    Serial.println(_currentRow - 1);
 
     bool isPerfectMatch = false;
 
     if (_currentRow == 63) {
-      // First row always succeeds
-      _foundationLeft[63] = _currentBlockLeft;
-      _foundationRight[63] = _currentBlockLeft + _currentBlockSize - 1;
+      // First double-row always succeeds
+      _foundationLeft[63] = _foundationLeft[62] = _currentBlockLeft;
+      _foundationRight[63] = _foundationRight[62] = _currentBlockLeft + _currentBlockSize - 1;
     } else {
-      // Calculate overlap with the layer directly underneath (row + 1)
+      // Calculate overlap with the top row of the previous pair (row + 1)
       uint8_t prevLeft = _foundationLeft[_currentRow + 1];
       uint8_t prevRight = _foundationRight[_currentRow + 1];
       uint8_t currLeft = _currentBlockLeft;
@@ -148,9 +150,9 @@ public:
         return;
       }
       
-      // Trim block size to overlap region
-      _foundationLeft[_currentRow] = overlapLeft;
-      _foundationRight[_currentRow] = overlapRight;
+      // Trim block size to overlap region and store in both rows of the new pair
+      _foundationLeft[_currentRow] = _foundationLeft[_currentRow - 1] = overlapLeft;
+      _foundationRight[_currentRow] = _foundationRight[_currentRow - 1] = overlapRight;
       _currentBlockSize = overlapRight - overlapLeft + 1;
 
       // Handle perfect match bonuses:
@@ -158,11 +160,13 @@ public:
       if (isPerfectMatch && _perfectMatchCount >= 10) {
         if (_currentBlockSize < 7) {
           _currentBlockSize++;
-          // Expand the physical placed foundation so next level has a wider base
+          // Expand the physical placed foundation on both active rows
           if (_foundationRight[_currentRow] < 7) {
             _foundationRight[_currentRow]++;
+            _foundationRight[_currentRow - 1]++;
           } else if (_foundationLeft[_currentRow] > 0) {
             _foundationLeft[_currentRow]--;
+            _foundationLeft[_currentRow - 1]--;
           }
           Serial.print("Streak Bonus! Gained bonus pixel. New size: ");
           Serial.println(_currentBlockSize);
@@ -170,8 +174,8 @@ public:
       }
     }
     
-    // Check Win Condition
-    if (_currentRow == 0) {
+    // Check Win Condition (reached or surpassed top row 0)
+    if (_currentRow <= 1) {
       _state = GAME_WON;
       _lastFlashTime = millis();
       _flashState = true;
@@ -179,8 +183,8 @@ public:
       return;
     }
     
-    // Move up
-    _currentRow--;
+    // Move up by 2 vertical layers
+    _currentRow -= 2;
     
     // Gradual difficulty speed curve
     int difficulty = 63 - _currentRow;
@@ -221,6 +225,8 @@ public:
 
   void draw(MD_MAX72XX* mx) {
     if (_state == GAME_OVER) {
+      // Apply double buffering to Game Over screen to prevent flickering
+      mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
       mx->clear();
       if (_flashState) {
         // Draw vertical "GAME OVER"
@@ -233,10 +239,13 @@ public:
         drawCharCCW(mx, 6, font_E);
         drawCharCCW(mx, 7, font_R);
       }
+      mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
       return;
     }
 
     if (_state == GAME_WON) {
+      // Apply double buffering to Win screen to prevent flickering
+      mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
       mx->clear();
       if (_flashState) {
         // Draw vertical "YOU WIN"
@@ -249,6 +258,7 @@ public:
         drawCharCCW(mx, 6, font_N);
         drawCharCCW(mx, 7, font_space);
       }
+      mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
       return;
     }
     
@@ -265,13 +275,13 @@ public:
       }
     }
     
-    // 4. Draw currently moving block
+    // 4. Draw currently moving block (2 layers thick vertically: _currentRow and _currentRow - 1)
     for (uint8_t i = 0; i < _currentBlockSize; i++) {
       mx->setPoint(_currentBlockLeft + i, _currentRow, true);
+      mx->setPoint(_currentBlockLeft + i, _currentRow - 1, true);
     }
 
     // 5. Re-enable auto-updates and flush the entire buffer atomically to the hardware.
-    // This removes screen tearing, strobing, and flicker completely.
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
   }
   
