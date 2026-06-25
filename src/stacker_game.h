@@ -41,7 +41,7 @@ private:
   uint8_t _foundationLeft[64];
   uint8_t _foundationRight[64];
   
-  // Perfect matches tracking
+  // Consecutive perfect matches tracking
   uint8_t _perfectMatchCount;
 
   // Stacker width is 8 pixels (mapped to the 8 physical rows of the display)
@@ -54,15 +54,15 @@ private:
   uint32_t _lastFlashTime;
   bool _flashState;
 
-  // Helper to draw a character rotated 90 degrees CCW
+  // Helper to draw a character rotated 90 degrees CCW (mirrored corrected)
   void drawCharCCW(MD_MAX72XX* mx, uint8_t matrixIdx, const uint8_t font[8]) {
     for (uint8_t fRow = 0; fRow < 8; fRow++) {
       for (uint8_t fCol = 0; fCol < 8; fCol++) {
         bool state = (font[fRow] & (1 << (7 - fCol))) != 0;
-        // Rotated 90 degrees CCW:
-        // row (horizontal) = 7 - fCol
+        // Rotated 90 degrees CCW (horizontal flip corrected by using fCol instead of 7 - fCol):
+        // row (horizontal) = fCol
         // column (vertical) = matrixIdx * 8 + fRow
-        mx->setPoint(7 - fCol, matrixIdx * 8 + fRow, state);
+        mx->setPoint(fCol, matrixIdx * 8 + fRow, state);
       }
     }
   }
@@ -78,7 +78,7 @@ public:
     _moveDirection = 1;
     _lastMoveTime = millis();
     _speedMs = 180;         // Starting speed (ms per step)
-    _perfectMatchCount = 0; // Reset perfect matches
+    _perfectMatchCount = 0; // Reset perfect match streak
     
     for (int i = 0; i < 64; i++) {
       _foundationLeft[i] = 0;
@@ -88,7 +88,7 @@ public:
     _btnWasPressed = false;
     _lastFlashTime = 0;
     _flashState = true;
-    Serial.println("Stacker Game Reset (7-pixel base).");
+    Serial.println("Stacker Game Reset (7-pixel base, consecutive streak enabled).");
   }
 
   void handleInput(bool btnPressed) {
@@ -128,8 +128,12 @@ public:
       if (currLeft == prevLeft && currRight == prevRight) {
         isPerfectMatch = true;
         _perfectMatchCount++;
-        Serial.print("PERFECT MATCH! Total count: ");
+        Serial.print("PERFECT MATCH! Consecutive streak: ");
         Serial.println(_perfectMatchCount);
+      } else {
+        // Streak broken! Reset to 0.
+        _perfectMatchCount = 0;
+        Serial.println("Streak broken! Perfect match count reset.");
       }
 
       int8_t overlapLeft = (currLeft > prevLeft) ? currLeft : prevLeft;
@@ -150,7 +154,7 @@ public:
       _currentBlockSize = overlapRight - overlapLeft + 1;
 
       // Handle perfect match bonuses:
-      // 10 matches -> regain 1 pixel. 11 matches -> regain another, up to 7 pixels max.
+      // 10 consecutive matches -> regain 1 pixel. 11 consecutive -> regain another, up to 7 pixels max.
       if (isPerfectMatch && _perfectMatchCount >= 10) {
         if (_currentBlockSize < 7) {
           _currentBlockSize++;
@@ -160,7 +164,7 @@ public:
           } else if (_foundationLeft[_currentRow] > 0) {
             _foundationLeft[_currentRow]--;
           }
-          Serial.print("Gained bonus pixel! New size: ");
+          Serial.print("Streak Bonus! Gained bonus pixel. New size: ");
           Serial.println(_currentBlockSize);
         }
       }
