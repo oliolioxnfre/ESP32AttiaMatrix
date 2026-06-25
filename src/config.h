@@ -15,12 +15,14 @@
 
 // --- BUTTONS ---
 #define POWER_BTN_PIN  4 // Toggle Display On/Off (GND active)
-#define SCREEN_BTN_PIN 5 // Toggle Screen / Hold to Reset WiFi (GND active)
-#define GAME_BTN_PIN   6 // Place Stacker Block (GND active)
+#define SCREEN_BTN_PIN 5 // Toggle Screen / Hold to Cycle (GND active)
+#define GAME_LEFT_BTN_PIN   6 // Left in Tetris / Drop in Stacker (GND active)
+#define GAME_RIGHT_BTN_PIN  7 // Right in Tetris (GND active)
 
 // Button timings
 #define DEBOUNCE_TIME_MS 50
 #define LONG_PRESS_TIME_MS 5000
+#define CYCLE_HOLD_TIME_MS 1500
 
 // --- NVS PREFERENCES ---
 #define PREF_NAMESPACE "matrix_cfg"
@@ -46,7 +48,8 @@ enum SystemState {
   STATE_CONNECTING_WIFI,
   STATE_STOCK_TICKER,
   STATE_CLOCK,
-  STATE_GAME
+  STATE_GAME,
+  STATE_TETRIS
 };
 
 #endif // CONFIG_H

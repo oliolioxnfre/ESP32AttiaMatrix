@@ -7,6 +7,7 @@
 #include "stock_client.h"
 #include "clock_client.h"
 #include "stacker_game.h"
+#include "tetris_game.h"
 
 // --- GLOBAL INSTANCES ---
 DisplayManager displayManager;
@@ -14,11 +15,13 @@ WebPortal webPortal;
 StockClient stockClient;
 ClockClient clockClient;
 StackerGame stackerGame;
+TetrisGame tetrisGame;
 
 // --- STATE MANAGEMENT ---
 SystemState currentState = STATE_BOOT_ANIMATION;
 uint32_t lastStockFetchTime = 0;
 bool stockScrollInit = true;
+bool rotateTriggeredByHold = false;
 
 // Clock states
 enum ClockSubState {
@@ -79,10 +82,17 @@ uint32_t screenBtnPressTime = 0;
 void handleButtons() {
   bool powerVal = digitalRead(POWER_BTN_PIN);
   bool screenVal = digitalRead(SCREEN_BTN_PIN);
-  bool gameVal = digitalRead(GAME_BTN_PIN);
+  bool leftVal = digitalRead(GAME_LEFT_BTN_PIN);
+  bool rightVal = digitalRead(GAME_RIGHT_BTN_PIN);
   
-  // Pass game button state to the game engine
-  stackerGame.handleInput(gameVal == LOW);
+  // Pass button inputs to active game
+  if (currentState == STATE_GAME) {
+    stackerGame.handleInput(leftVal == LOW);
+  } else if (currentState == STATE_TETRIS) {
+    bool rotatePressed = (leftVal == LOW && rightVal == LOW) || rotateTriggeredByHold;
+    rotateTriggeredByHold = false; // Reset trigger
+    tetrisGame.handleInput(leftVal == LOW, rightVal == LOW, rotatePressed);
+  }
   
   // 1. Power Button (On/Off Display)
   if (powerVal != lastPowerBtnState) {
@@ -105,20 +115,32 @@ void handleButtons() {
       // Released!
       uint32_t pressDuration = millis() - screenBtnPressTime;
       if (pressDuration < LONG_PRESS_TIME_MS) {
-        // Short Press: Toggle screens if display is active and connected
-        if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || currentState == STATE_GAME)) {
-          if (currentState == STATE_STOCK_TICKER) {
-            currentState = STATE_CLOCK;
-            clockSubState = CLOCK_INIT;
-            Serial.println("Button: Switched to Clock Screen");
-          } else if (currentState == STATE_CLOCK) {
-            currentState = STATE_GAME;
-            stackerGame.reset();
-            Serial.println("Button: Switched to Stacker Game Screen");
-          } else {
-            currentState = STATE_STOCK_TICKER;
-            stockScrollInit = true;
-            Serial.println("Button: Switched to Stock Ticker Screen");
+        if (pressDuration < CYCLE_HOLD_TIME_MS) {
+          // Short Press: Toggle screens if display is active and connected
+          if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || currentState == STATE_GAME || currentState == STATE_TETRIS)) {
+            if (currentState == STATE_STOCK_TICKER) {
+              currentState = STATE_CLOCK;
+              clockSubState = CLOCK_INIT;
+              Serial.println("Button: Switched to Clock Screen");
+            } else if (currentState == STATE_CLOCK) {
+              currentState = STATE_GAME;
+              stackerGame.reset();
+              Serial.println("Button: Switched to Stacker Game Screen");
+            } else if (currentState == STATE_GAME) {
+              currentState = STATE_TETRIS;
+              tetrisGame.reset();
+              Serial.println("Button: Switched to Tetris Screen");
+            } else {
+              currentState = STATE_STOCK_TICKER;
+              stockScrollInit = true;
+              Serial.println("Button: Switched to Stock Ticker Screen");
+            }
+          }
+        } else {
+          // Medium Hold (between 1.5s and 5s): Rotate piece in Tetris
+          if (displayManager.isOn() && currentState == STATE_TETRIS) {
+            rotateTriggeredByHold = true;
+            Serial.println("Button: Rotate triggered by hold!");
           }
         }
       }
@@ -153,7 +175,8 @@ void setup() {
   // Set up pins
   pinMode(POWER_BTN_PIN, INPUT_PULLUP);
   pinMode(SCREEN_BTN_PIN, INPUT_PULLUP);
-  pinMode(GAME_BTN_PIN, INPUT_PULLUP);
+  pinMode(GAME_LEFT_BTN_PIN, INPUT_PULLUP);
+  pinMode(GAME_RIGHT_BTN_PIN, INPUT_PULLUP);
   
   // Create Mutex for stock fetching
   stockMutex = xSemaphoreCreateMutex();
@@ -329,6 +352,12 @@ void loop() {
     case STATE_GAME: {
       stackerGame.updateLogic();
       stackerGame.draw(displayManager.getGraphicObject());
+      break;
+    }
+    
+    case STATE_TETRIS: {
+      tetrisGame.updateLogic(displayManager.getGraphicObject());
+      tetrisGame.draw(displayManager.getGraphicObject());
       break;
     }
   }
