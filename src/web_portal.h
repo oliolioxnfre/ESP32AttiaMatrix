@@ -419,7 +419,7 @@ public:
     _server.begin();
     _isPortalActive = true;
     
-    displayManager.showScrollText("WiFi Setup Mode! AP: ESP32-AttiaMatrix-Setup", 60);
+    displayManager.showScrollText("WiFi Setup Mode! Connect Wifi to Attia-Matrix!", 60);
   }
 
   void handleClient() {

@@ -35,7 +35,7 @@
 #define DEFAULT_TZ "EST5EDT,M3.2.0,M11.1.0" // Eastern Time
 
 // --- ACCESS POINT CONFIG ---
-#define AP_SSID "ESP32-AttiaMatrix-Setup"
+#define AP_SSID "Attia-Matrix"
 #define AP_IP IPAddress(192, 168, 4, 1)
 
 // --- SYSTEM STATE ---
