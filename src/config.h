@@ -16,6 +16,7 @@
 // --- BUTTONS ---
 #define POWER_BTN_PIN  4 // Toggle Display On/Off (GND active)
 #define SCREEN_BTN_PIN 5 // Toggle Screen / Hold to Reset WiFi (GND active)
+#define GAME_BTN_PIN   6 // Place Stacker Block (GND active)
 
 // Button timings
 #define DEBOUNCE_TIME_MS 50
@@ -44,7 +45,8 @@ enum SystemState {
   STATE_WIFI_SETUP,
   STATE_CONNECTING_WIFI,
   STATE_STOCK_TICKER,
-  STATE_CLOCK
+  STATE_CLOCK,
+  STATE_GAME
 };
 
 #endif // CONFIG_H

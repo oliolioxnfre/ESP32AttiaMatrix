@@ -91,6 +91,10 @@ public:
   void setIntensity(uint8_t intensity) {
     _display.setIntensity(intensity);
   }
+
+  MD_MAX72XX* getGraphicObject() {
+    return _display.getGraphicObject();
+  }
 };
 
 extern DisplayManager displayManager;
