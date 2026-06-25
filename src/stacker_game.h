@@ -18,18 +18,17 @@ private:
   GameState _state;
   uint8_t _currentBlockSize;
   int8_t _currentBlockLeft;
-  int8_t _currentRow;
+  int8_t _currentRow; // Ranges from 63 (bottom/base) to 0 (top/win)
   int8_t _moveDirection;
   uint32_t _lastMoveTime;
   uint32_t _speedMs;
   
-  uint8_t _foundationLeft[8];
-  uint8_t _foundationRight[8];
+  uint8_t _foundationLeft[64];
+  uint8_t _foundationRight[64];
   
-  const uint8_t PLAY_LEFT = 24;
-  const uint8_t PLAY_RIGHT = 39;
-  const uint8_t BORDER_LEFT = 23;
-  const uint8_t BORDER_RIGHT = 40;
+  // Stacker width is 8 pixels (mapped to the 8 physical rows of the display)
+  const uint8_t PLAY_LEFT = 0;
+  const uint8_t PLAY_RIGHT = 7;
   
   bool _btnWasPressed;
 
@@ -38,20 +37,20 @@ public:
 
   void reset() {
     _state = PLAYING;
-    _currentBlockSize = 4;
-    _currentBlockLeft = PLAY_LEFT;
-    _currentRow = 7; // Start at bottom row (7)
+    _currentBlockSize = 3;  // 3 pixels is a perfect starting size for 8-pixel width
+    _currentBlockLeft = 2;  // Center the block initially
+    _currentRow = 63;       // Start at the bottom of the 64-column vertical layout
     _moveDirection = 1;
     _lastMoveTime = millis();
-    _speedMs = 180; // Starting speed (ms per horizontal step)
+    _speedMs = 180;         // Starting speed (ms per step)
     
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 64; i++) {
       _foundationLeft[i] = 0;
       _foundationRight[i] = 0;
     }
     
     _btnWasPressed = false;
-    Serial.println("Stacker Game Reset.");
+    Serial.println("Stacker Game Reset (Rotated Layout).");
   }
 
   void handleInput(bool btnPressed) {
@@ -62,6 +61,9 @@ public:
         placeBlock();
       } else if (_state == GAME_OVER || _state == GAME_WON || _state == MESSAGE_SCROLL) {
         reset();
+        // Prevent immediate block placement on restart by forcing the user
+        // to release the button first before a new click can be registered.
+        _btnWasPressed = true;
       }
     } else if (!btnPressed) {
       _btnWasPressed = false;
@@ -69,15 +71,15 @@ public:
   }
 
   void placeBlock() {
-    Serial.print("Placed block at row ");
+    Serial.print("Placed block at vertical row ");
     Serial.println(_currentRow);
 
-    if (_currentRow == 7) {
-      // Bottom row always succeeds
-      _foundationLeft[7] = _currentBlockLeft;
-      _foundationRight[7] = _currentBlockLeft + _currentBlockSize - 1;
+    if (_currentRow == 63) {
+      // First row at bottom always succeeds
+      _foundationLeft[63] = _currentBlockLeft;
+      _foundationRight[63] = _currentBlockLeft + _currentBlockSize - 1;
     } else {
-      // Calculate overlap with the layer directly underneath
+      // Calculate overlap with the layer directly underneath (row + 1)
       uint8_t prevLeft = _foundationLeft[_currentRow + 1];
       uint8_t prevRight = _foundationRight[_currentRow + 1];
       uint8_t currLeft = _currentBlockLeft;
@@ -103,19 +105,21 @@ public:
     // Check Win Condition (reached top row 0)
     if (_currentRow == 0) {
       _state = GAME_WON;
-      Serial.println("Reached top! Win!");
+      Serial.println("Reached top level! Win!");
       displayManager.showScrollText("YOU WIN! Press Game button to restart.  ", 50);
       return;
     }
     
-    // Move up
+    // Move up to next vertical layer
     _currentRow--;
     
-    // Speed increases as tower climbs
-    _speedMs = max(35, 180 - (7 - _currentRow) * 20);
+    // Gradual difficulty speed curve spanning 63 levels
+    int difficulty = 63 - _currentRow;
+    _speedMs = (difficulty < 30) ? (180 - difficulty * 3) : (90 - (difficulty - 30) * 1.5);
+    if (_speedMs < 35) _speedMs = 35; // Cap maximum speed at 35ms per step
     
     // Reset block at left edge
-    _currentBlockLeft = PLAY_LEFT;
+    _currentBlockLeft = 0;
     _moveDirection = 1;
     _lastMoveTime = millis();
   }
@@ -130,7 +134,7 @@ public:
       
       _currentBlockLeft += _moveDirection;
       
-      // Bounce off borders
+      // Bounce off side edges
       if (_currentBlockLeft <= PLAY_LEFT) {
         _currentBlockLeft = PLAY_LEFT;
         _moveDirection = 1;
@@ -157,22 +161,18 @@ public:
     // Clear raw frame buffer
     mx->clear();
     
-    // 1. Draw boundary borders
-    for (uint8_t r = 0; r < 8; r++) {
-      mx->setPoint(r, BORDER_LEFT, true);
-      mx->setPoint(r, BORDER_RIGHT, true);
-    }
+    // Note: No vertical borders needed since the borders are now the physical edges of the 8-pixel width.
     
-    // 2. Draw placed block stack
-    for (int8_t r = 7; r > _currentRow; r--) {
-      for (uint8_t col = _foundationLeft[r]; col <= _foundationRight[r]; col++) {
-        mx->setPoint(r, col, true);
+    // 1. Draw placed block stack (from bottom row 63 up to current row)
+    for (int8_t c = 63; c > _currentRow; c--) {
+      for (uint8_t r = _foundationLeft[c]; r <= _foundationRight[c]; r++) {
+        mx->setPoint(r, c, true);
       }
     }
     
-    // 3. Draw moving block
+    // 2. Draw currently moving block at the current active row
     for (uint8_t i = 0; i < _currentBlockSize; i++) {
-      mx->setPoint(_currentRow, _currentBlockLeft + i, true);
+      mx->setPoint(_currentBlockLeft + i, _currentRow, true);
     }
   }
   
