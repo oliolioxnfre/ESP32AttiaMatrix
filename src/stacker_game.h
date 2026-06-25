@@ -88,7 +88,7 @@ public:
     _btnWasPressed = false;
     _lastFlashTime = 0;
     _flashState = true;
-    Serial.println("Stacker Game Reset (7-pixel base, consecutive streak enabled).");
+    Serial.println("Stacker Game Reset (Double Buffering Active).");
   }
 
   void handleInput(bool btnPressed) {
@@ -252,20 +252,27 @@ public:
       return;
     }
     
-    // Clear raw frame buffer
+    // 1. Disable automatic hardware updates to construct the frame in RAM buffer
+    mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
+
+    // 2. Clear raw frame buffer in software
     mx->clear();
     
-    // 1. Draw placed block stack
+    // 3. Draw placed block stack
     for (int8_t c = 63; c > _currentRow; c--) {
       for (uint8_t r = _foundationLeft[c]; r <= _foundationRight[c]; r++) {
         mx->setPoint(r, c, true);
       }
     }
     
-    // 2. Draw currently moving block
+    // 4. Draw currently moving block
     for (uint8_t i = 0; i < _currentBlockSize; i++) {
       mx->setPoint(_currentBlockLeft + i, _currentRow, true);
     }
+
+    // 5. Re-enable auto-updates and flush the entire buffer atomically to the hardware.
+    // This removes screen tearing, strobing, and flicker completely.
+    mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
   }
   
   bool isPlaying() const {
