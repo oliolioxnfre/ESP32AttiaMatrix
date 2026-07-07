@@ -191,9 +191,14 @@ public:
     _speedMs = (difficulty < 30) ? (180 - difficulty * 3) : (90 - (difficulty - 30) * 1.5);
     if (_speedMs < 35) _speedMs = 35;
     
-    // Reset block at left edge
-    _currentBlockLeft = 0;
-    _moveDirection = 1;
+    // Reset block at alternating edges
+    if (((63 - _currentRow) / 2) % 2 == 0) {
+      _currentBlockLeft = 0;
+      _moveDirection = 1;
+    } else {
+      _currentBlockLeft = PLAY_RIGHT - _currentBlockSize + 1;
+      _moveDirection = -1;
+    }
     _lastMoveTime = millis();
   }
 
