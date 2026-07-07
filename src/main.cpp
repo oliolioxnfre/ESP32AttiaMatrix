@@ -74,13 +74,10 @@ void stockFetchTask(void* pvParameters) {
 }
 
 // --- BUTTON DEBOUNCING AND INTERACTION ---
-bool lastPowerBtnState = HIGH;
 bool lastScreenBtnState = HIGH;
-uint32_t powerBtnPressTime = 0;
 uint32_t screenBtnPressTime = 0;
 
 void handleButtons() {
-  bool powerVal = digitalRead(POWER_BTN_PIN);
   bool screenVal = digitalRead(SCREEN_BTN_PIN);
   bool leftVal = digitalRead(GAME_LEFT_BTN_PIN);
   bool rightVal = digitalRead(GAME_RIGHT_BTN_PIN);
@@ -94,18 +91,7 @@ void handleButtons() {
     tetrisGame.handleInput(leftVal == LOW, rightVal == LOW, rotatePressed);
   }
   
-  // 1. Power Button (On/Off Display)
-  if (powerVal != lastPowerBtnState) {
-    delay(10); // debounce
-    powerVal = digitalRead(POWER_BTN_PIN);
-    if (powerVal == LOW && lastPowerBtnState == HIGH) {
-      Serial.println("Button: Power Pressed!");
-      displayManager.setPower(!displayManager.isOn());
-    }
-    lastPowerBtnState = powerVal;
-  }
-  
-  // 2. Screen Button (Cycle Screens / Long-Press Setup Reset)
+  // Screen Button (Cycle Screens / Long-Press Setup Reset / 5-Click Power Toggle)
   if (screenVal != lastScreenBtnState) {
     delay(10); // debounce
     screenVal = digitalRead(SCREEN_BTN_PIN);
@@ -116,24 +102,42 @@ void handleButtons() {
       uint32_t pressDuration = millis() - screenBtnPressTime;
       if (pressDuration < LONG_PRESS_TIME_MS) {
         if (pressDuration < CYCLE_HOLD_TIME_MS) {
-          // Short Press: Toggle screens if display is active and connected
-          if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || currentState == STATE_GAME || currentState == STATE_TETRIS)) {
-            if (currentState == STATE_STOCK_TICKER) {
-              currentState = STATE_CLOCK;
-              clockSubState = CLOCK_INIT;
-              Serial.println("Button: Switched to Clock Screen");
-            } else if (currentState == STATE_CLOCK) {
-              currentState = STATE_GAME;
-              stackerGame.reset();
-              Serial.println("Button: Switched to Stacker Game Screen");
-            } else if (currentState == STATE_GAME) {
-              currentState = STATE_TETRIS;
-              tetrisGame.reset();
-              Serial.println("Button: Switched to Tetris Screen");
-            } else {
-              currentState = STATE_STOCK_TICKER;
-              stockScrollInit = true;
-              Serial.println("Button: Switched to Stock Ticker Screen");
+          // Short Press: 5-Click Vape style Power Toggle, or cycle screens
+          static uint8_t screenClickCount = 0;
+          static uint32_t lastScreenClickTime = 0;
+          uint32_t now = millis();
+          
+          if (now - lastScreenClickTime > 500) {
+            screenClickCount = 1;
+          } else {
+            screenClickCount++;
+          }
+          lastScreenClickTime = now;
+          
+          if (screenClickCount == 5) {
+            Serial.println("Button: 5 clicks detected! Toggling display power.");
+            displayManager.setPower(!displayManager.isOn());
+            screenClickCount = 0; // Reset click counter
+          } else {
+            // Normal short press: Cycle screens if display is active and connected
+            if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || currentState == STATE_GAME || currentState == STATE_TETRIS)) {
+              if (currentState == STATE_STOCK_TICKER) {
+                currentState = STATE_CLOCK;
+                clockSubState = CLOCK_INIT;
+                Serial.println("Button: Switched to Clock Screen");
+              } else if (currentState == STATE_CLOCK) {
+                currentState = STATE_GAME;
+                stackerGame.reset();
+                Serial.println("Button: Switched to Stacker Game Screen");
+              } else if (currentState == STATE_GAME) {
+                currentState = STATE_TETRIS;
+                tetrisGame.reset();
+                Serial.println("Button: Switched to Tetris Screen");
+              } else {
+                currentState = STATE_STOCK_TICKER;
+                stockScrollInit = true;
+                Serial.println("Button: Switched to Stock Ticker Screen");
+              }
             }
           }
         } else {
@@ -173,7 +177,6 @@ void setup() {
   Serial.println("\n--- Multipurpose 1x8 Matrix Ticker starting ---");
   
   // Set up pins
-  pinMode(POWER_BTN_PIN, INPUT_PULLUP);
   pinMode(SCREEN_BTN_PIN, INPUT_PULLUP);
   pinMode(GAME_LEFT_BTN_PIN, INPUT_PULLUP);
   pinMode(GAME_RIGHT_BTN_PIN, INPUT_PULLUP);

@@ -6,6 +6,7 @@
 #include <MD_MAX72xx.h>
 #include <SPI.h>
 #include "config.h"
+#include "custom_font.h"
 
 class DisplayManager {
 private:
@@ -15,10 +16,10 @@ private:
 
   // Custom arrow character definitions (5 columns wide)
   // Format: {width, col0, col1, col2, col3, col4}
-  // Up arrow '^' pointing up
-  uint8_t _arrowUp[6] = {5, 0x10, 0x18, 0x7C, 0x18, 0x10};
-  // Down arrow 'v' pointing down
-  uint8_t _arrowDown[6] = {5, 0x10, 0x30, 0x7C, 0x30, 0x10};
+  // Up arrow '^' pointing up (shifted down by 1 pixel)
+  uint8_t _arrowUp[6] = {5, 0x20, 0x30, 0xF8, 0x30, 0x20};
+  // Down arrow 'v' pointing down (shifted down by 1 pixel)
+  uint8_t _arrowDown[6] = {5, 0x20, 0x60, 0xF8, 0x60, 0x20};
 
 public:
   DisplayManager() : 
@@ -32,10 +33,13 @@ public:
     _display.setIntensity(1); // Moderate brightness (0 to 15)
     _display.displayClear();
     
-    // Register our custom characters
+    // Set our custom shifted font
+    _display.setFont(customFont);
+    
+    // Register our custom characters (already shifted to match the font)
     _display.addChar('^', _arrowUp);
     _display.addChar('v', _arrowDown);
-
+    
 #if FLIP_DISPLAY_180
     _display.setZoneEffect(0, true, PA_FLIP_UD);
     _display.setZoneEffect(0, true, PA_FLIP_LR);
@@ -63,7 +67,11 @@ public:
     _scrollBuffer[sizeof(_scrollBuffer) - 1] = '\0';
     
     _display.displayClear();
+#if FLIP_DISPLAY_180
+    _display.displayText(_scrollBuffer, PA_LEFT, speed, pause, PA_SCROLL_RIGHT, PA_SCROLL_RIGHT);
+#else
     _display.displayText(_scrollBuffer, PA_LEFT, speed, pause, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
+#endif
   }
 
   // Sets up the display to show a static text, centered
