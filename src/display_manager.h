@@ -35,6 +35,11 @@ public:
     // Register our custom characters
     _display.addChar('^', _arrowUp);
     _display.addChar('v', _arrowDown);
+
+#if FLIP_DISPLAY_180
+    _display.setZoneEffect(0, true, PA_FLIP_UD);
+    _display.setZoneEffect(0, true, PA_FLIP_LR);
+#endif
   }
 
   // Toggles the display hardware state (power-saving)
@@ -98,5 +103,13 @@ public:
 };
 
 extern DisplayManager displayManager;
+
+inline void setPointFlipped(MD_MAX72XX* mx, uint8_t r, uint8_t c, bool state) {
+#if FLIP_DISPLAY_180
+  mx->setPoint(7 - r, 63 - c, state);
+#else
+  mx->setPoint(r, c, state);
+#endif
+}
 
 #endif // DISPLAY_MANAGER_H

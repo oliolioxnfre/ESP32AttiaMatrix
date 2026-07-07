@@ -7,6 +7,8 @@
 // --- MATRIX DISPLAY HARDWARE ---
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define MAX_DEVICES 8 // 1 Row of 8 matrices
+#define FLIP_DISPLAY_180 1 // Set to 1 to flip the display upside down (180 degrees)
+
 
 // Pins connected to MAX7219
 #define DATA_PIN  11  // DIN

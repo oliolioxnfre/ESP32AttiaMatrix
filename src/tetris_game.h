@@ -228,7 +228,7 @@ private:
     for (int y = HEIGHT - 1; y >= 0; y--) {
       mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
       for (int x = 0; x < WIDTH; x++) {
-        mx->setPoint(x, y, false);
+        setPointFlipped(mx, x, y, false);
       }
       mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
       #if defined(BUZZER_PIN) && BUZZER_PIN >= 0
@@ -254,7 +254,7 @@ private:
             }
           }
         }
-        mx->setPoint(x, y, pixel);
+        setPointFlipped(mx, x, y, pixel);
       }
     }
   }
@@ -264,7 +264,7 @@ private:
     for (uint8_t fRow = 0; fRow < 8; fRow++) {
       for (uint8_t fCol = 0; fCol < 8; fCol++) {
         bool state = (font[fRow] & (1 << (7 - fCol))) != 0;
-        mx->setPoint(fCol, matrixIdx * 8 + fRow, state);
+        setPointFlipped(mx, fCol, matrixIdx * 8 + fRow, state);
       }
     }
   }

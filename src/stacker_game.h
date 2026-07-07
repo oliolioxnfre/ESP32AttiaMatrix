@@ -62,7 +62,7 @@ private:
         // Rotated 90 degrees CCW (horizontal flip corrected by using fCol instead of 7 - fCol):
         // row (horizontal) = fCol
         // column (vertical) = matrixIdx * 8 + fRow
-        mx->setPoint(fCol, matrixIdx * 8 + fRow, state);
+        setPointFlipped(mx, fCol, matrixIdx * 8 + fRow, state);
       }
     }
   }
@@ -271,14 +271,14 @@ public:
     // 3. Draw placed block stack
     for (int8_t c = 63; c > _currentRow; c--) {
       for (uint8_t r = _foundationLeft[c]; r <= _foundationRight[c]; r++) {
-        mx->setPoint(r, c, true);
+        setPointFlipped(mx, r, c, true);
       }
     }
     
     // 4. Draw currently moving block (2 layers thick vertically: _currentRow and _currentRow - 1)
     for (uint8_t i = 0; i < _currentBlockSize; i++) {
-      mx->setPoint(_currentBlockLeft + i, _currentRow, true);
-      mx->setPoint(_currentBlockLeft + i, _currentRow - 1, true);
+      setPointFlipped(mx, _currentBlockLeft + i, _currentRow, true);
+      setPointFlipped(mx, _currentBlockLeft + i, _currentRow - 1, true);
     }
 
     // 5. Re-enable auto-updates and flush the entire buffer atomically to the hardware.
