@@ -6,6 +6,7 @@
 #include "web_portal.h"
 #include "stock_client.h"
 #include "clock_client.h"
+#include "clock_screen.h"
 #include "stacker_game.h"
 #include "tetris_game.h"
 
@@ -14,6 +15,7 @@ DisplayManager displayManager;
 WebPortal webPortal;
 StockClient stockClient;
 ClockClient clockClient;
+ClockScreen clockScreen;
 StackerGame stackerGame;
 TetrisGame tetrisGame;
 
@@ -318,21 +320,14 @@ void loop() {
       
       switch (clockSubState) {
         case CLOCK_INIT:
-          // Show static time
           clockStateStartTime = millis();
-          colonState = true;
-          lastColonBlinkTime = millis();
-          displayManager.showStaticText(clockClient.getFormattedTime(colonState).c_str());
+          clockScreen.reset();
+          clockScreen.update(displayManager.getGraphicObject());
           clockSubState = CLOCK_TIME;
           break;
           
         case CLOCK_TIME:
-          // Blink colon every 500ms
-          if (millis() - lastColonBlinkTime >= 500) {
-            lastColonBlinkTime = millis();
-            colonState = !colonState;
-            displayManager.showStaticText(clockClient.getFormattedTime(colonState).c_str());
-          }
+          clockScreen.update(displayManager.getGraphicObject());
           
           // After showing time for 10 seconds, scroll the date
           if (millis() - clockStateStartTime >= 10000) {
