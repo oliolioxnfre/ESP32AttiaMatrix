@@ -29,7 +29,6 @@ AnimationsScreen animationsScreen;
 SystemState currentState = STATE_BOOT_ANIMATION;
 uint32_t lastStockFetchTime = 0;
 bool stockScrollInit = true;
-bool rotateTriggeredByHold = false;
 
 // Clock states
 enum ClockSubState {
@@ -144,9 +143,9 @@ void handleButtons() {
   if (currentState == STATE_GAME) {
     stackerGame.handleInput(leftVal == LOW);
   } else if (currentState == STATE_TETRIS) {
-    bool rotatePressed = (leftVal == LOW && rightVal == LOW) || rotateTriggeredByHold;
-    rotateTriggeredByHold = false; // Reset trigger
-    tetrisGame.handleInput(leftVal == LOW, rightVal == LOW, rotatePressed);
+    bool rotatePressed = (leftVal == LOW && rightVal == LOW);
+    bool fastFallHeld = (screenVal == LOW); // Hold GPIO 5 for fast fall
+    tetrisGame.handleInput(leftVal == LOW, rightVal == LOW, rotatePressed, fastFallHeld);
   } else if (currentState == STATE_TIMER) {
     // Pass GPIO 6 (up), GPIO 7 (down), and pending single-press of GPIO 5 (start/stop)
     // Note: start/stop is handled below via the pendingSinglePress mechanism
@@ -205,13 +204,9 @@ void handleButtons() {
               screenPressCount = 0;
             }
           }
-        } else {
-          // Medium Hold (between 1.5s and 5s): Rotate piece in Tetris
-          if (displayManager.isOn() && currentState == STATE_TETRIS) {
-            rotateTriggeredByHold = true;
-            Serial.println("Button: Rotate triggered by hold!");
-          }
         }
+        // Medium Hold (between 1.5s and 5s): reserved, no action currently
+        // (Tetris fast-fall is now handled by live GPIO 5 state, not a hold-release event)
       }
     }
     lastScreenBtnState = screenVal;

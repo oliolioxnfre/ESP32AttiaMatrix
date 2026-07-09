@@ -41,9 +41,13 @@ private:
   int _speed;
   const int _baseSpeed = 380;
   const int _minSpeed = 70;
+  const int _fastFallSpeed = 30; // Interval while GPIO 5 is held for soft/fast drop
 
   // Latch for button release
   bool _btnWasPressed;
+
+  // True while the fast-fall button is currently held down
+  bool _fastFallHeld;
   
   // Flashing game over screen state
   uint32_t _lastFlashTime;
@@ -270,7 +274,7 @@ private:
   }
 
 public:
-  TetrisGame() : _state(PLAYING), _btnWasPressed(false) {}
+  TetrisGame() : _state(PLAYING), _btnWasPressed(false), _fastFallHeld(false) {}
 
   void reset() {
     _state = PLAYING;
@@ -281,6 +285,7 @@ public:
     _lastFall = millis();
     _lastInput = millis();
     _btnWasPressed = false;
+    _fastFallHeld = false;
     _lastFlashTime = 0;
     _flashState = true;
     
@@ -288,7 +293,9 @@ public:
     Serial.println("Tetris Game Reset (8x64).");
   }
 
-  void handleInput(bool leftPressed, bool rightPressed, bool rotatePressed) {
+  void handleInput(bool leftPressed, bool rightPressed, bool rotatePressed, bool fastFallHeld = false) {
+    _fastFallHeld = fastFallHeld;
+
     if (_state == PLAYING) {
       if (rotatePressed && (millis() - _lastInput > 200)) {
         playRotateSound();
@@ -343,8 +350,9 @@ public:
       return;
     }
     
-    // Normal gravity drop
-    if (millis() - _lastFall > (unsigned long)_speed) {
+    // Normal gravity drop (accelerated while fast-fall button is held)
+    int interval = _fastFallHeld ? min(_speed, _fastFallSpeed) : _speed;
+    if (millis() - _lastFall > (unsigned long)interval) {
       _lastFall = millis();
       
       if (!collide(_posX, _posY + 1, _rotation)) {
