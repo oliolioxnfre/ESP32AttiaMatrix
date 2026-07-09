@@ -9,6 +9,7 @@
 #include "clock_screen.h"
 #include "stacker_game.h"
 #include "tetris_game.h"
+#include "timer_screen.h"
 
 // --- GLOBAL INSTANCES ---
 DisplayManager displayManager;
@@ -18,6 +19,7 @@ ClockClient clockClient;
 ClockScreen clockScreen;
 StackerGame stackerGame;
 TetrisGame tetrisGame;
+TimerScreen timerScreen;
 
 // --- STATE MANAGEMENT ---
 SystemState currentState = STATE_BOOT_ANIMATION;
@@ -79,10 +81,43 @@ void stockFetchTask(void* pvParameters) {
 bool lastScreenBtnState = HIGH;
 uint32_t screenBtnPressTime = 0;
 
+// Double-press detection state
+uint8_t screenPressCount = 0;
+uint32_t firstPressTime = 0;
+bool pendingSinglePress = false;
+
+void cycleScreen() {
+  // Cycle: Stock -> Clock -> Timer -> Stacker -> Tetris -> Stock
+  if (currentState == STATE_STOCK_TICKER) {
+    currentState = STATE_CLOCK;
+    clockSubState = CLOCK_INIT;
+    Serial.println("Button: Switched to Clock Screen");
+  } else if (currentState == STATE_CLOCK) {
+    currentState = STATE_TIMER;
+    timerScreen.reset();
+    Serial.println("Button: Switched to Timer Screen");
+  } else if (currentState == STATE_TIMER) {
+    // Make sure buzzer is off when leaving timer
+    noTone(BUZZER_PIN);
+    currentState = STATE_GAME;
+    stackerGame.reset();
+    Serial.println("Button: Switched to Stacker Game Screen");
+  } else if (currentState == STATE_GAME) {
+    currentState = STATE_TETRIS;
+    tetrisGame.reset();
+    Serial.println("Button: Switched to Tetris Screen");
+  } else {
+    currentState = STATE_STOCK_TICKER;
+    stockScrollInit = true;
+    Serial.println("Button: Switched to Stock Ticker Screen");
+  }
+}
+
 void handleButtons() {
   bool screenVal = digitalRead(SCREEN_BTN_PIN);
   bool leftVal = digitalRead(GAME_LEFT_BTN_PIN);
   bool rightVal = digitalRead(GAME_RIGHT_BTN_PIN);
+  uint32_t now = millis();
   
   // Pass button inputs to active game
   if (currentState == STATE_GAME) {
@@ -91,9 +126,14 @@ void handleButtons() {
     bool rotatePressed = (leftVal == LOW && rightVal == LOW) || rotateTriggeredByHold;
     rotateTriggeredByHold = false; // Reset trigger
     tetrisGame.handleInput(leftVal == LOW, rightVal == LOW, rotatePressed);
+  } else if (currentState == STATE_TIMER) {
+    // Pass GPIO 6 (up), GPIO 7 (down), and pending single-press of GPIO 5 (start/stop)
+    // Note: start/stop is handled below via the pendingSinglePress mechanism
+    timerScreen.handleInput(leftVal == LOW, rightVal == LOW, pendingSinglePress);
+    pendingSinglePress = false;
   }
   
-  // Screen Button (Cycle Screens / Long-Press Setup Reset / 5-Click Power Toggle)
+  // Screen Button (Double-Press Cycle / Long-Press Setup Reset / 5-Click Power Toggle)
   if (screenVal != lastScreenBtnState) {
     delay(10); // debounce
     screenVal = digitalRead(SCREEN_BTN_PIN);
@@ -104,42 +144,37 @@ void handleButtons() {
       uint32_t pressDuration = millis() - screenBtnPressTime;
       if (pressDuration < LONG_PRESS_TIME_MS) {
         if (pressDuration < CYCLE_HOLD_TIME_MS) {
-          // Short Press: 5-Click Vape style Power Toggle, or cycle screens
-          static uint8_t screenClickCount = 0;
-          static uint32_t lastScreenClickTime = 0;
-          uint32_t now = millis();
+          // Short press detected — count for double-press / 5-click
+          static uint8_t rapidClickCount = 0;
+          static uint32_t lastRapidClickTime = 0;
           
-          if (now - lastScreenClickTime > 500) {
-            screenClickCount = 1;
+          if (now - lastRapidClickTime > 500) {
+            rapidClickCount = 1;
           } else {
-            screenClickCount++;
+            rapidClickCount++;
           }
-          lastScreenClickTime = now;
+          lastRapidClickTime = now;
           
-          if (screenClickCount == 5) {
+          // 5-click power toggle takes priority
+          if (rapidClickCount == 5) {
             Serial.println("Button: 5 clicks detected! Toggling display power.");
             displayManager.setPower(!displayManager.isOn());
-            screenClickCount = 0; // Reset click counter
+            rapidClickCount = 0;
+            screenPressCount = 0; // Reset double-press state too
           } else {
-            // Normal short press: Cycle screens if display is active and connected
-            if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || currentState == STATE_GAME || currentState == STATE_TETRIS)) {
-              if (currentState == STATE_STOCK_TICKER) {
-                currentState = STATE_CLOCK;
-                clockSubState = CLOCK_INIT;
-                Serial.println("Button: Switched to Clock Screen");
-              } else if (currentState == STATE_CLOCK) {
-                currentState = STATE_GAME;
-                stackerGame.reset();
-                Serial.println("Button: Switched to Stacker Game Screen");
-              } else if (currentState == STATE_GAME) {
-                currentState = STATE_TETRIS;
-                tetrisGame.reset();
-                Serial.println("Button: Switched to Tetris Screen");
-              } else {
-                currentState = STATE_STOCK_TICKER;
-                stockScrollInit = true;
-                Serial.println("Button: Switched to Stock Ticker Screen");
+            // Double-press detection for screen cycling
+            screenPressCount++;
+            if (screenPressCount == 1) {
+              firstPressTime = now;
+            } else if (screenPressCount >= 2) {
+              if (now - firstPressTime <= DOUBLE_PRESS_WINDOW_MS) {
+                // Double-press confirmed — cycle screen
+                if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || 
+                    currentState == STATE_TIMER || currentState == STATE_GAME || currentState == STATE_TETRIS)) {
+                  cycleScreen();
+                }
               }
+              screenPressCount = 0;
             }
           }
         } else {
@@ -152,6 +187,15 @@ void handleButtons() {
       }
     }
     lastScreenBtnState = screenVal;
+  }
+  
+  // Check if a single-press window expired without a second press (single press for timer start/stop)
+  if (screenPressCount == 1 && (now - firstPressTime > DOUBLE_PRESS_WINDOW_MS)) {
+    screenPressCount = 0;
+    // A confirmed single press — used for timer start/stop
+    if (currentState == STATE_TIMER) {
+      pendingSinglePress = true;
+    }
   }
   
   // Check for Long Press (forces setup mode reset)
@@ -182,6 +226,10 @@ void setup() {
   pinMode(SCREEN_BTN_PIN, INPUT_PULLUP);
   pinMode(GAME_LEFT_BTN_PIN, INPUT_PULLUP);
   pinMode(GAME_RIGHT_BTN_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  noTone(BUZZER_PIN);
+  pinMode(BUZZER_GND_PIN, OUTPUT);
+  digitalWrite(BUZZER_GND_PIN, LOW);
   
   // Create Mutex for stock fetching
   stockMutex = xSemaphoreCreateMutex();
@@ -320,30 +368,24 @@ void loop() {
       
       switch (clockSubState) {
         case CLOCK_INIT:
-          clockStateStartTime = millis();
           clockScreen.reset();
           clockScreen.update(displayManager.getGraphicObject());
           clockSubState = CLOCK_TIME;
           break;
           
         case CLOCK_TIME:
+          // Continuously run the sliding clock animation — no date scroll
           clockScreen.update(displayManager.getGraphicObject());
-          
-          // After showing time for 10 seconds, scroll the date
-          if (millis() - clockStateStartTime >= 10000) {
-            String dateText = clockClient.getFormattedDate();
-            displayManager.showScrollText(dateText.c_str(), 65, 0);
-            clockSubState = CLOCK_DATE;
-          }
           break;
           
-        case CLOCK_DATE:
-          // Run scroll animation for the date. When finished, cycle back to showing the time!
-          if (displayManager.update()) {
-            clockSubState = CLOCK_INIT;
-          }
+        default:
           break;
       }
+      break;
+    }
+    
+    case STATE_TIMER: {
+      timerScreen.update(displayManager.getGraphicObject());
       break;
     }
     

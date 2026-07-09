@@ -18,13 +18,18 @@
 // --- BUTTONS ---
 #define POWER_BTN_PIN  4 // Toggle Display On/Off (GND active)
 #define SCREEN_BTN_PIN 5 // Toggle Screen / Hold to Cycle (GND active)
-#define GAME_LEFT_BTN_PIN   6 // Left in Tetris / Drop in Stacker (GND active)
-#define GAME_RIGHT_BTN_PIN  7 // Right in Tetris (GND active)
+#define GAME_LEFT_BTN_PIN   6 // Left in Tetris / Drop in Stacker / Timer Up (GND active)
+#define GAME_RIGHT_BTN_PIN  7 // Right in Tetris / Timer Down (GND active)
+
+// --- BUZZER ---
+#define BUZZER_PIN 8 // Passive buzzer output
+#define BUZZER_GND_PIN 15 // Spare GPIO held LOW as a virtual ground for the buzzer
 
 // Button timings
 #define DEBOUNCE_TIME_MS 50
 #define LONG_PRESS_TIME_MS 5000
 #define CYCLE_HOLD_TIME_MS 1500
+#define DOUBLE_PRESS_WINDOW_MS 400 // Max gap between presses for double-press screen switch
 
 // --- NVS PREFERENCES ---
 #define PREF_NAMESPACE "matrix_cfg"
@@ -50,6 +55,7 @@ enum SystemState {
   STATE_CONNECTING_WIFI,
   STATE_STOCK_TICKER,
   STATE_CLOCK,
+  STATE_TIMER,
   STATE_GAME,
   STATE_TETRIS
 };
