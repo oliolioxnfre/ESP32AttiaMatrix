@@ -6,6 +6,7 @@
 #include "config.h"
 #include "display_manager.h"
 #include "clock_screen.h" // Reuse font_t and drawDigit approach
+#include "song_data.h" // Alarm melody (converted from MIDI)
 
 // Timer states
 enum TimerState {
@@ -39,8 +40,9 @@ private:
   bool _colonState;
   uint32_t _lastColonBlink;
 
-  // Buzzer alarm pattern
-  uint32_t _lastBuzzerToggle;
+  // Buzzer alarm melody playback (non-blocking)
+  size_t _songIndex;
+  uint32_t _nextNoteTime;
 
   // --- Font drawing (reuses font_t from clock_screen.h) ---
   int getFontIndex(char ch) {
@@ -97,13 +99,25 @@ private:
     _remainSeconds = _setSeconds;
   }
 
+  // Plays songNotes[] non-blocking, looping for as long as the alarm is active
   void buzzerTick() {
     uint32_t now = millis();
-    // Fire a self-stopping 400ms beep every 600ms (matches TetrisGame's tone() usage)
-    if (now - _lastBuzzerToggle >= 600) {
-      _lastBuzzerToggle = now;
-      tone(BUZZER_PIN, 2000, 400); // 2kHz beep for 400ms
+    if ((int32_t)(now - _nextNoteTime) < 0) return; // Not time for the next note yet
+
+    BuzzerNote note;
+    memcpy_P(&note, &billadySong[_songIndex], sizeof(BuzzerNote));
+    if (note.freq > 0) {
+      tone(BUZZER_PIN, note.freq, note.durationMs);
+    } else {
+      noTone(BUZZER_PIN);
     }
+
+    _songIndex++;
+    if (_songIndex >= billadySong_LEN) _songIndex = 0; // Loop the song
+
+    uint16_t nextGap;
+    memcpy_P(&nextGap, &billadySong[_songIndex].gapMs, sizeof(nextGap));
+    _nextNoteTime = now + note.durationMs + nextGap;
   }
 
 public:
@@ -121,12 +135,14 @@ public:
     _prevStartStop(false),
     _colonState(true),
     _lastColonBlink(0),
-    _lastBuzzerToggle(0) {}
+    _songIndex(0),
+    _nextNoteTime(0) {}
 
   void reset() {
     _state = TIMER_SETTING;
     _remainSeconds = _setSeconds;
     noTone(BUZZER_PIN);
+    _songIndex = 0;
   }
 
   TimerState getState() const { return _state; }
@@ -203,6 +219,7 @@ public:
             (upPressed && !_prevUp) ||
             (downPressed && !_prevDown)) {
           noTone(BUZZER_PIN);
+          _songIndex = 0;
           _state = TIMER_SETTING;
           _remainSeconds = _setSeconds; // Reset to last-set time
           Serial.println("Timer: Alarm dismissed.");
@@ -229,8 +246,8 @@ public:
         }
         if (_remainSeconds == 0) {
           _state = TIMER_ALARM;
-          _lastBuzzerToggle = now;
-          tone(BUZZER_PIN, 2000, 400); // Immediate first beep
+          _songIndex = 0;
+          _nextNoteTime = now; // Start the melody immediately
           Serial.println("Timer: ALARM! Time's up!");
         }
       }
