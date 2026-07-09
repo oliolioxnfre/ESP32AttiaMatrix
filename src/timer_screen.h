@@ -40,6 +40,16 @@ private:
   bool _colonState;
   uint32_t _lastColonBlink;
 
+  // Digit slide animation (mirrors ClockScreen's flip effect)
+  struct Digit {
+    char currentVal;
+    char prevVal;
+    bool scrolling;
+    int16_t yOffset; // Vertical offset: starts at 8, slides to 0
+  };
+  Digit _digits[4]; // M2, M1, S2, S1
+  uint32_t _lastDigitTick;
+
   // Buzzer alarm melody playback (non-blocking)
   size_t _songIndex;
   uint32_t _nextNoteTime;
@@ -91,12 +101,22 @@ private:
     return 60;                              // ±1 minute
   }
 
+  void getDigitsFor(uint16_t totalSeconds, char out[4]) {
+    uint8_t mins = totalSeconds / 60;
+    uint8_t secs = totalSeconds % 60;
+    out[0] = '0' + (mins / 10);
+    out[1] = '0' + (mins % 10);
+    out[2] = '0' + (secs / 10);
+    out[3] = '0' + (secs % 10);
+  }
+
   void adjustTime(int16_t delta) {
     int32_t newVal = (int32_t)_setSeconds + delta;
     if (newVal < 0) newVal = 0;
     if (newVal > 5999) newVal = 5999; // Cap at 99:59
     _setSeconds = (uint16_t)newVal;
     _remainSeconds = _setSeconds;
+    tone(BUZZER_PIN, delta > 0 ? 1400 : 900, 15); // Digit-adjust blip
   }
 
   // Plays songNotes[] non-blocking, looping for as long as the alarm is active
@@ -135,14 +155,33 @@ public:
     _prevStartStop(false),
     _colonState(true),
     _lastColonBlink(0),
+    _lastDigitTick(0),
     _songIndex(0),
-    _nextNoteTime(0) {}
+    _nextNoteTime(0) {
+    char initial[4];
+    getDigitsFor(_setSeconds, initial);
+    for (int i = 0; i < 4; i++) {
+      _digits[i].currentVal = initial[i];
+      _digits[i].prevVal = initial[i];
+      _digits[i].scrolling = false;
+      _digits[i].yOffset = 0;
+    }
+  }
 
   void reset() {
     _state = TIMER_SETTING;
     _remainSeconds = _setSeconds;
     noTone(BUZZER_PIN);
     _songIndex = 0;
+
+    char digits[4];
+    getDigitsFor(_setSeconds, digits);
+    for (int i = 0; i < 4; i++) {
+      _digits[i].currentVal = digits[i];
+      _digits[i].prevVal = digits[i];
+      _digits[i].scrolling = false;
+      _digits[i].yOffset = 0;
+    }
   }
 
   TimerState getState() const { return _state; }
@@ -265,35 +304,61 @@ public:
       _colonState = !_colonState;
     }
 
-    // --- Draw frame ---
+    // --- Digit values for current display state ---
     uint16_t displaySeconds = (_state == TIMER_RUNNING || _state == TIMER_PAUSED || _state == TIMER_ALARM)
                               ? _remainSeconds : _setSeconds;
-    uint8_t mins = displaySeconds / 60;
-    uint8_t secs = displaySeconds % 60;
+    char newDigits[4];
+    getDigitsFor(displaySeconds, newDigits);
 
-    char digits[4];
-    digits[0] = '0' + (mins / 10);
-    digits[1] = '0' + (mins % 10);
-    digits[2] = '0' + (secs / 10);
-    digits[3] = '0' + (secs % 10);
+    // --- Digit slide animation tick (mirrors ClockScreen's flip effect) ---
+    if (now - _lastDigitTick >= 40) { // 40ms sliding steps
+      _lastDigitTick = now;
 
+      // Advance offsets of currently scrolling digits
+      for (int i = 0; i < 4; i++) {
+        if (_digits[i].scrolling) {
+          _digits[i].yOffset--;
+          if (_digits[i].yOffset <= 0) {
+            _digits[i].yOffset = 0;
+            _digits[i].scrolling = false;
+          }
+        }
+      }
+
+      // Start a new slide for any digit whose value just changed
+      for (int i = 0; i < 4; i++) {
+        if (!_digits[i].scrolling && _digits[i].currentVal != newDigits[i]) {
+          _digits[i].prevVal = _digits[i].currentVal;
+          _digits[i].currentVal = newDigits[i];
+          _digits[i].scrolling = true;
+          _digits[i].yOffset = 8; // Starts off-screen, slides down to 0
+        }
+      }
+    }
+
+    // --- Draw frame ---
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
     mx->clear();
 
-    // Center MM:SS on the 64-column display
-    // Using similar positioning to clock screen but only 4 digits + 1 colon
-    // Total width: 4 * 7 (digits) + 4 (colon) + 3 * 2 (gaps) = ~36 pixels
-    // Center offset: (64 - 36) / 2 = 14, so start from column ~50
+    // Center "MM:SS" (36px wide: 4 digits @ 7px + colon @ 4px + 4 single-px gaps)
+    // on the 64-column display: (64 - 36) / 2 = 14px margin each side.
     int baseX = 49;
     int positions[4] = {
       baseX,        // M2 (tens of minutes)
       baseX - 8,    // M1 (ones of minutes)
-      baseX - 17,   // S2 (tens of seconds)
-      baseX - 25    // S1 (ones of seconds)
+      baseX - 21,   // S2 (tens of seconds)
+      baseX - 29    // S1 (ones of seconds)
     };
 
     for (int i = 0; i < 4; i++) {
-      drawDigit(mx, digits[i], positions[i], 0);
+      if (_digits[i].scrolling) {
+        // Old value slides up and out
+        drawDigit(mx, _digits[i].prevVal, positions[i], _digits[i].yOffset - 8);
+        // New value slides down into place
+        drawDigit(mx, _digits[i].currentVal, positions[i], _digits[i].yOffset);
+      } else {
+        drawDigit(mx, _digits[i].currentVal, positions[i], 0);
+      }
     }
 
     // Draw colon between minutes and seconds
@@ -312,7 +377,7 @@ public:
     }
 
     if (showColon) {
-      drawDigit(mx, ':', baseX - 13, 0);
+      drawDigit(mx, ':', baseX - 16, 0);
     }
 
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);

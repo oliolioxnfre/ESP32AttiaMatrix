@@ -113,6 +113,8 @@ public:
     Serial.print(" and ");
     Serial.println(_currentRow - 1);
 
+    tone(BUZZER_PIN, 700, 40); // Layer-placed blip
+
     bool isPerfectMatch = false;
 
     if (_currentRow == 63) {

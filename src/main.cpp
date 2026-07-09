@@ -10,6 +10,8 @@
 #include "stacker_game.h"
 #include "tetris_game.h"
 #include "timer_screen.h"
+#include "reaction_game.h"
+#include "animation_screen.h"
 
 // --- GLOBAL INSTANCES ---
 DisplayManager displayManager;
@@ -20,6 +22,8 @@ ClockScreen clockScreen;
 StackerGame stackerGame;
 TetrisGame tetrisGame;
 TimerScreen timerScreen;
+ReactionGame reactionGame;
+AnimationsScreen animationsScreen;
 
 // --- STATE MANAGEMENT ---
 SystemState currentState = STATE_BOOT_ANIMATION;
@@ -37,6 +41,10 @@ ClockSubState clockSubState = CLOCK_INIT;
 uint32_t clockStateStartTime = 0;
 bool colonState = true;
 uint32_t lastColonBlinkTime = 0;
+
+// Reaction test screen state
+ReactionPhase lastReactionPhase = REACT_INTRO;
+bool reactionTextInit = true;
 
 // --- THREAD-SAFE BACKGROUND STOCK FETCHING ---
 SemaphoreHandle_t stockMutex = NULL;
@@ -87,7 +95,7 @@ uint32_t firstPressTime = 0;
 bool pendingSinglePress = false;
 
 void cycleScreen() {
-  // Cycle: Stock -> Clock -> Timer -> Stacker -> Tetris -> Stock
+  // Cycle: Stock -> Clock -> Timer -> Stacker -> Tetris -> Reaction -> Animations -> Stock
   if (currentState == STATE_STOCK_TICKER) {
     currentState = STATE_CLOCK;
     clockSubState = CLOCK_INIT;
@@ -106,7 +114,20 @@ void cycleScreen() {
     currentState = STATE_TETRIS;
     tetrisGame.reset();
     Serial.println("Button: Switched to Tetris Screen");
+  } else if (currentState == STATE_TETRIS) {
+    currentState = STATE_REACTION;
+    reactionGame.reset();
+    reactionTextInit = true;
+    lastReactionPhase = REACT_INTRO;
+    Serial.println("Button: Switched to Reaction Test Screen");
+  } else if (currentState == STATE_REACTION) {
+    currentState = STATE_ANIMATIONS;
+    animationsScreen.reset();
+    Serial.println("Button: Switched to Animations Screen");
   } else {
+    // Leaving animations (or any unexpected state) - restore default brightness,
+    // since the Fade effect leaves the panel intensity wherever it stopped.
+    displayManager.setIntensity(1);
     currentState = STATE_STOCK_TICKER;
     stockScrollInit = true;
     Serial.println("Button: Switched to Stock Ticker Screen");
@@ -131,6 +152,12 @@ void handleButtons() {
     // Note: start/stop is handled below via the pendingSinglePress mechanism
     timerScreen.handleInput(leftVal == LOW, rightVal == LOW, pendingSinglePress);
     pendingSinglePress = false;
+  } else if (currentState == STATE_REACTION) {
+    // Any of GPIO 5, 6, or 7 counts as a reaction tap
+    reactionGame.handleInput(leftVal == LOW, rightVal == LOW, pendingSinglePress);
+    pendingSinglePress = false;
+  } else if (currentState == STATE_ANIMATIONS) {
+    animationsScreen.handleInput(leftVal == LOW, rightVal == LOW);
   }
   
   // Screen Button (Double-Press Cycle / Long-Press Setup Reset / 5-Click Power Toggle)
@@ -169,8 +196,9 @@ void handleButtons() {
             } else if (screenPressCount >= 2) {
               if (now - firstPressTime <= DOUBLE_PRESS_WINDOW_MS) {
                 // Double-press confirmed — cycle screen
-                if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK || 
-                    currentState == STATE_TIMER || currentState == STATE_GAME || currentState == STATE_TETRIS)) {
+                if (displayManager.isOn() && (currentState == STATE_STOCK_TICKER || currentState == STATE_CLOCK ||
+                    currentState == STATE_TIMER || currentState == STATE_GAME || currentState == STATE_TETRIS ||
+                    currentState == STATE_REACTION || currentState == STATE_ANIMATIONS)) {
                   cycleScreen();
                 }
               }
@@ -192,8 +220,8 @@ void handleButtons() {
   // Check if a single-press window expired without a second press (single press for timer start/stop)
   if (screenPressCount == 1 && (now - firstPressTime > DOUBLE_PRESS_WINDOW_MS)) {
     screenPressCount = 0;
-    // A confirmed single press — used for timer start/stop
-    if (currentState == STATE_TIMER) {
+    // A confirmed single press — used for timer start/stop and reaction taps
+    if (currentState == STATE_TIMER || currentState == STATE_REACTION) {
       pendingSinglePress = true;
     }
   }
@@ -400,8 +428,60 @@ void loop() {
       tetrisGame.draw(displayManager.getGraphicObject());
       break;
     }
+
+    case STATE_REACTION: {
+      reactionGame.update();
+      ReactionPhase phase = reactionGame.getPhase();
+      if (phase != lastReactionPhase) {
+        lastReactionPhase = phase;
+        reactionTextInit = true;
+      }
+
+      switch (phase) {
+        case REACT_INTRO:
+          if (reactionTextInit) {
+            reactionTextInit = false;
+            displayManager.showScrollText("Reaction Test!    Tap When Ready", 60, 300);
+          }
+          if (displayManager.update()) {
+            displayManager.showScrollText("Reaction Test!    Tap When Ready", 60, 300);
+          }
+          break;
+
+        case REACT_ARMED:
+          if (reactionTextInit) {
+            reactionTextInit = false;
+            displayManager.clear();
+          }
+          break;
+
+        case REACT_FLASH:
+          reactionGame.drawFlash(displayManager.getGraphicObject());
+          break;
+
+        case REACT_RESULT:
+          if (reactionTextInit) {
+            reactionTextInit = false;
+            char resultBuf[16];
+            snprintf(resultBuf, sizeof(resultBuf), "%u ms", reactionGame.getLastReactionMs());
+            displayManager.showScrollText(resultBuf, 60, 300);
+          }
+          if (displayManager.update()) {
+            char resultBuf[16];
+            snprintf(resultBuf, sizeof(resultBuf), "%u ms", reactionGame.getLastReactionMs());
+            displayManager.showScrollText(resultBuf, 60, 300);
+          }
+          break;
+      }
+      break;
+    }
+
+    case STATE_ANIMATIONS: {
+      animationsScreen.update(displayManager.getGraphicObject());
+      break;
+    }
   }
-  
+
   // yield to FreeRTOS background tasks
   delay(1);
 }
