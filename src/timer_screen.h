@@ -41,7 +41,6 @@ private:
 
   // Buzzer alarm pattern
   uint32_t _lastBuzzerToggle;
-  bool _buzzerOn;
 
   // --- Font drawing (reuses font_t from clock_screen.h) ---
   int getFontIndex(char ch) {
@@ -100,14 +99,10 @@ private:
 
   void buzzerTick() {
     uint32_t now = millis();
-    if (now - _lastBuzzerToggle >= (_buzzerOn ? 500 : 300)) {
+    // Fire a self-stopping 400ms beep every 600ms (matches TetrisGame's tone() usage)
+    if (now - _lastBuzzerToggle >= 600) {
       _lastBuzzerToggle = now;
-      _buzzerOn = !_buzzerOn;
-      if (_buzzerOn) {
-        tone(BUZZER_PIN, 2000); // 2kHz tone
-      } else {
-        noTone(BUZZER_PIN);
-      }
+      tone(BUZZER_PIN, 2000, 400); // 2kHz beep for 400ms
     }
   }
 
@@ -126,14 +121,12 @@ public:
     _prevStartStop(false),
     _colonState(true),
     _lastColonBlink(0),
-    _lastBuzzerToggle(0),
-    _buzzerOn(false) {}
+    _lastBuzzerToggle(0) {}
 
   void reset() {
     _state = TIMER_SETTING;
     _remainSeconds = _setSeconds;
     noTone(BUZZER_PIN);
-    _buzzerOn = false;
   }
 
   TimerState getState() const { return _state; }
@@ -210,7 +203,6 @@ public:
             (upPressed && !_prevUp) ||
             (downPressed && !_prevDown)) {
           noTone(BUZZER_PIN);
-          _buzzerOn = false;
           _state = TIMER_SETTING;
           _remainSeconds = _setSeconds; // Reset to last-set time
           Serial.println("Timer: Alarm dismissed.");
@@ -238,8 +230,7 @@ public:
         if (_remainSeconds == 0) {
           _state = TIMER_ALARM;
           _lastBuzzerToggle = now;
-          _buzzerOn = true;
-          tone(BUZZER_PIN, 2000);
+          tone(BUZZER_PIN, 2000, 400); // Immediate first beep
           Serial.println("Timer: ALARM! Time's up!");
         }
       }
