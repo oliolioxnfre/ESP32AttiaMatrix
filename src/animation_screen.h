@@ -29,8 +29,6 @@ private:
     FX_COUNT
   };
 
-  static const uint32_t EFFECT_DURATION_MS = 9000; // auto-cycle time per effect
-
   uint8_t _effect;
   bool _init;
   uint32_t _lastFrame;
@@ -428,9 +426,6 @@ public:
   }
 
   void update(MD_MAX72XX* mx) {
-    if (millis() - _effectStart >= EFFECT_DURATION_MS) {
-      nextEffect();
-    }
     runEffect(mx);
   }
 };

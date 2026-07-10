@@ -288,9 +288,10 @@ void loop() {
   // 1. Process Buttons (Handles power and screen switching)
   handleButtons();
   
-  // If the display is powered off, we clear the display and wait
+  // If the display is powered off, skip the state machine but keep polling
+  // buttons at full speed (no blocking delay) so rapid clicks (e.g. the
+  // 5-click power toggle) aren't missed while the screen is off.
   if (!displayManager.isOn()) {
-    delay(100);
     return;
   }
   
