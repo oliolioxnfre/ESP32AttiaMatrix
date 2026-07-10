@@ -38,6 +38,7 @@
 #define PREF_STOCKS "stocks"
 #define PREF_API_KEY "finnhub_key"
 #define PREF_TZ "timezone"
+#define PREF_TETRIS_HIGH_SCORE "tetris_hi"
 
 // --- DEFAULT FALLBACKS ---
 #define DEFAULT_STOCKS "AAPL,MSFT,GOOG,TSLA"

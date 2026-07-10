@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <MD_MAX72xx.h>
+#include <Preferences.h>
 #include "config.h"
 #include "display_manager.h"
 
@@ -25,17 +26,19 @@ private:
 
   GameState _state;
   static const uint8_t WIDTH = 8;
-  static const uint8_t HEIGHT = 64; // Scaled to full 8-matrix length
-  
+  static const uint8_t HEADER_MODULES = 2; // Top 2 matrices reserved for the score HUD
+  static const uint8_t HEADER_ROWS = HEADER_MODULES * 8; // 16 rows
+  static const uint8_t HEIGHT = 64 - HEADER_ROWS; // Playfield height (48 rows, below the HUD)
+
   byte _field[WIDTH][HEIGHT];
-  
+
   // Game piece coordinates and orientation
   int _posX, _posY;
   int _shape, _rotation;
-  
+
   unsigned long _lastFall;
   unsigned long _lastInput;
-  
+
   int _score;
   int _level;
   int _speed;
@@ -48,10 +51,28 @@ private:
 
   // True while the fast-fall button is currently held down
   bool _fastFallHeld;
-  
+
+  // Persistent high score (NVS)
+  int _highScore;
+  bool _highScoreLoaded;
+
   // Flashing game over screen state
   uint32_t _lastFlashTime;
-  bool _flashState;
+  uint8_t _flashPhase; // 0: "GAME OVER" text, 1: blank, 2: high score
+
+  // Compact 8x8 digit glyphs (rows top-to-bottom, MSB-first columns) for the score HUD
+  const byte _digitFont[10][8] = {
+    {0x00,0x3C,0x66,0x66,0x66,0x66,0x3C,0x00}, // 0
+    {0x00,0x18,0x38,0x18,0x18,0x18,0x3C,0x00}, // 1
+    {0x00,0x3C,0x66,0x06,0x1C,0x30,0x7E,0x00}, // 2
+    {0x00,0x3C,0x66,0x0C,0x06,0x66,0x3C,0x00}, // 3
+    {0x00,0x0C,0x1C,0x2C,0x4C,0x7E,0x0C,0x00}, // 4
+    {0x00,0x7E,0x60,0x7C,0x06,0x66,0x3C,0x00}, // 5
+    {0x00,0x1C,0x30,0x60,0x7C,0x66,0x3C,0x00}, // 6
+    {0x00,0x7E,0x06,0x0C,0x18,0x18,0x18,0x00}, // 7
+    {0x00,0x3C,0x66,0x3C,0x66,0x66,0x3C,0x00}, // 8
+    {0x00,0x3C,0x66,0x66,0x3E,0x0C,0x38,0x00}  // 9
+  };
 
   // 7 standard Tetris pieces (each shape has 4 rotations of 4x4 matrix)
   const byte _shapes[7][4][4][4] = {
@@ -149,6 +170,7 @@ private:
     
     if (collide(_posX, _posY, _rotation)) {
       _state = GAME_OVER_ANIMATION;
+      saveHighScoreIfBeaten();
       playGameOverSound();
     }
   }
@@ -232,7 +254,7 @@ private:
     for (int y = HEIGHT - 1; y >= 0; y--) {
       mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
       for (int x = 0; x < WIDTH; x++) {
-        setPointFlipped(mx, x, y, false);
+        setPointFlipped(mx, x, y + HEADER_ROWS, false);
       }
       mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
       #if defined(BUZZER_PIN) && BUZZER_PIN >= 0
@@ -242,12 +264,12 @@ private:
     }
   }
 
-  // Draw the Tetris board to buffer
+  // Draw the Tetris board to buffer (below the reserved score HUD rows)
   void drawActiveField(MD_MAX72XX* mx) {
     for (int x = 0; x < WIDTH; x++) {
       for (int y = 0; y < HEIGHT; y++) {
         bool pixel = _field[x][y];
-        
+
         // Overlay current falling block
         for (int i = 0; i < 4; i++) {
           for (int j = 0; j < 4; j++) {
@@ -258,7 +280,7 @@ private:
             }
           }
         }
-        setPointFlipped(mx, x, y, pixel);
+        setPointFlipped(mx, x, y + HEADER_ROWS, pixel);
       }
     }
   }
@@ -273,10 +295,51 @@ private:
     }
   }
 
+  // Draw a single digit (0-9) rotated to match the board orientation, into HUD matrix `matrixIdx`
+  void drawDigitCCW(MD_MAX72XX* mx, uint8_t matrixIdx, uint8_t digit) {
+    if (digit > 9) digit = 9;
+    for (uint8_t fRow = 0; fRow < 8; fRow++) {
+      for (uint8_t fCol = 0; fCol < 8; fCol++) {
+        bool state = (_digitFont[digit][fRow] & (1 << (7 - fCol))) != 0;
+        setPointFlipped(mx, fCol, matrixIdx * 8 + fRow, state);
+      }
+    }
+  }
+
+  // Draw a two-digit (00-99) number into the reserved HUD rows, starting at matrix `startModule`
+  void drawTwoDigitNumber(MD_MAX72XX* mx, int value, uint8_t startModule) {
+    if (value > 99) value = 99;
+    if (value < 0) value = 0;
+    drawDigitCCW(mx, startModule, value / 10);
+    drawDigitCCW(mx, startModule + 1, value % 10);
+  }
+
+  void loadHighScore() {
+    if (_highScoreLoaded) return;
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, true);
+    _highScore = prefs.getInt(PREF_TETRIS_HIGH_SCORE, 0);
+    prefs.end();
+    _highScoreLoaded = true;
+  }
+
+  void saveHighScoreIfBeaten() {
+    if (_score <= _highScore) return;
+    _highScore = _score;
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.putInt(PREF_TETRIS_HIGH_SCORE, _highScore);
+    prefs.end();
+    Serial.printf("Tetris: New high score saved: %d\n", _highScore);
+  }
+
 public:
-  TetrisGame() : _state(PLAYING), _btnWasPressed(false), _fastFallHeld(false) {}
+  TetrisGame() : _state(PLAYING), _btnWasPressed(false), _fastFallHeld(false),
+                 _highScore(0), _highScoreLoaded(false) {}
 
   void reset() {
+    loadHighScore();
+
     _state = PLAYING;
     memset(_field, 0, sizeof(_field));
     _score = 0;
@@ -287,8 +350,8 @@ public:
     _btnWasPressed = false;
     _fastFallHeld = false;
     _lastFlashTime = 0;
-    _flashState = true;
-    
+    _flashPhase = 0;
+
     newPiece();
     Serial.println("Tetris Game Reset (8x64).");
   }
@@ -338,14 +401,14 @@ public:
       playGameOverAnim(mx);
       _state = GAME_OVER_SCREEN;
       _lastFlashTime = millis();
-      _flashState = true;
+      _flashPhase = 0;
       return;
     }
-    
+
     if (_state == GAME_OVER_SCREEN) {
       if (millis() - _lastFlashTime >= 500) {
         _lastFlashTime = millis();
-        _flashState = !_flashState;
+        _flashPhase = (_flashPhase + 1) % 3; // 0: "GAME OVER", 1: blank, 2: high score
       }
       return;
     }
@@ -375,7 +438,7 @@ public:
     if (_state == GAME_OVER_SCREEN) {
       mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
       mx->clear();
-      if (_flashState) {
+      if (_flashPhase == 0) {
         // Draw vertical "GAME OVER"
         drawCharCCW(mx, 0, font_G);
         drawCharCCW(mx, 1, font_A);
@@ -385,15 +448,19 @@ public:
         drawCharCCW(mx, 5, font_V);
         drawCharCCW(mx, 6, font_E);
         drawCharCCW(mx, 7, font_R);
+      } else if (_flashPhase == 2) {
+        // Show the saved high score in the same two-module HUD spot used during play
+        drawTwoDigitNumber(mx, _highScore, 0);
       }
       mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
       return;
     }
-    
+
     // Draw active board with double-buffering
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
     mx->clear();
     drawActiveField(mx);
+    drawTwoDigitNumber(mx, _score, 0);
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
   }
 
