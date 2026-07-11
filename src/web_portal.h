@@ -192,7 +192,7 @@ private:
 
             <div class="form-group">
                 <label for="api_key">Finnhub API Key</label>
-                <input type="text" id="api_key" name="api_key" placeholder="Enter Finnhub API Key" value=")rawliteral" + _savedApiKey + R"rawliteral(">
+                <input type="text" id="api_key" name="api_key" placeholder="Enter Finnhub API Key" value=")rawliteral" + (_savedApiKey.length() > 0 ? _savedApiKey : String(DEFAULT_API_KEY)) + R"rawliteral(">
             </div>
 
             <div class="form-group">
@@ -205,6 +205,7 @@ private:
                     <option value="GMT0" )rawliteral" + (_savedTZ == "GMT0" ? "selected" : "") + R"rawliteral(">UTC / GMT</option>
                     <option value="GMT0BST,M3.5.0/2,M10.5.0/2" )rawliteral" + (_savedTZ == "GMT0BST,M3.5.0/2,M10.5.0/2" ? "selected" : "") + R"rawliteral(">London / UK Time</option>
                     <option value="CET1CEST,M3.5.0,M10.5.0/3" )rawliteral" + (_savedTZ == "CET1CEST,M3.5.0,M10.5.0/3" ? "selected" : "") + R"rawliteral(">Central European Time (CET/CEST)</option>
+                    <option value="EET-2EEST,M4.5.5/0,M10.5.4/24" )rawliteral" + (_savedTZ == "EET-2EEST,M4.5.5/0,M10.5.4/24" ? "selected" : "") + R"rawliteral(">Cairo / Egypt Time</option>
                     <option value="JST-9" )rawliteral" + (_savedTZ == "JST-9" ? "selected" : "") + R"rawliteral(">Japan Standard Time (JST)</option>
                     <option value="AEST-10AEDT,M10.1.0,A4.1.0" )rawliteral" + (_savedTZ == "AEST-10AEDT,M10.1.0,A4.1.0" ? "selected" : "") + R"rawliteral(">Sydney / Melbourne Time</option>
                 </select>

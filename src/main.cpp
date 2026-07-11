@@ -26,9 +26,15 @@ ReactionGame reactionGame;
 AnimationsScreen animationsScreen;
 
 // --- STATE MANAGEMENT ---
-SystemState currentState = STATE_BOOT_ANIMATION;
+SystemState currentState = STATE_BOOT_SPACE_INVADER;
 uint32_t lastStockFetchTime = 0;
 bool stockScrollInit = true;
+
+// Boot space invader animation state
+int16_t bootInvaderX = -5;
+uint32_t bootInvaderLastFrame = 0;
+bool bootInvaderFlag = false;
+uint8_t bootInvaderSoundIdx = 0;
 
 // Clock states
 enum ClockSubState {
@@ -239,6 +245,30 @@ void handleButtons() {
   }
 }
 
+// Helper function to draw a symmetric 10x8 space invader on the display.
+void drawInvader(MD_MAX72XX* mx, int16_t x, bool legState) {
+  const uint8_t invA[] = { 0x0e, 0x98, 0x7d, 0x36, 0x3c };
+  const uint8_t invB[] = { 0x70, 0x18, 0x7d, 0xb6, 0x3c };
+  const uint8_t dataSize = 5;
+  const uint8_t* set = legState ? invA : invB;
+  uint8_t cols = mx->getColumnCount();
+  
+  for (uint8_t i = 0; i < dataSize; i++) {
+    int left  = x - dataSize + i;
+    int right = x + dataSize - i - 1;
+    if (left >= 0 && left < cols) {
+      for (uint8_t row = 0; row < 8; row++) {
+        setPointFlipped(mx, row, left, (set[i] >> row) & 0x01);
+      }
+    }
+    if (right >= 0 && right < cols) {
+      for (uint8_t row = 0; row < 8; row++) {
+        setPointFlipped(mx, row, right, (set[i] >> row) & 0x01);
+      }
+    }
+  }
+}
+
 // --- SETUP & INITIALIZATION ---
 void setup() {
   Serial.begin(115200);
@@ -277,10 +307,13 @@ void setup() {
     0                      /* Pin task to Core 0 (Wi-Fi core) */
   );
   
-  // Start Boot Animation: "Hello, Mr Attia"
-  currentState = STATE_BOOT_ANIMATION;
-  displayManager.showScrollText("Hello, Mr Attia", 60);
-  Serial.println("Displaying Welcome message...");
+  // Start Boot Animation: Space Invader
+  currentState = STATE_BOOT_SPACE_INVADER;
+  bootInvaderX = -5;
+  bootInvaderLastFrame = millis();
+  bootInvaderFlag = false;
+  bootInvaderSoundIdx = 0;
+  Serial.println("Starting Space Invader boot animation...");
 }
 
 // --- MAIN LOOP ---
@@ -297,6 +330,41 @@ void loop() {
   
   // 2. State Machine
   switch (currentState) {
+    
+    case STATE_BOOT_SPACE_INVADER: {
+      MD_MAX72XX* mx = displayManager.getGraphicObject();
+      uint8_t cols = mx->getColumnCount();
+      uint32_t now = millis();
+      
+      if (now - bootInvaderLastFrame >= 150) {
+        bootInvaderLastFrame = now;
+        
+        // Advance invader position
+        bootInvaderX++;
+        bootInvaderFlag = !bootInvaderFlag;
+        
+        // Play beep/boop tone
+        const uint16_t soundFreqs[] = { 180, 150, 120, 90 };
+        tone(BUZZER_PIN, soundFreqs[bootInvaderSoundIdx % 4], 35);
+        bootInvaderSoundIdx++;
+        
+        // Refresh display
+        mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
+        mx->clear();
+        drawInvader(mx, bootInvaderX, bootInvaderFlag);
+        mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
+      }
+      
+      // Once it walks off screen: transition to welcome scroll
+      if (bootInvaderX >= cols + 5) {
+        noTone(BUZZER_PIN);
+        displayManager.clear();
+        currentState = STATE_BOOT_ANIMATION;
+        displayManager.showScrollText("Hello, Mr Attia", 60);
+        Serial.println("Boot Space Invader done. Scrolling welcome message...");
+      }
+      break;
+    }
     
     case STATE_BOOT_ANIMATION: {
       // Animate the welcome text. When scroll finishes once, transition

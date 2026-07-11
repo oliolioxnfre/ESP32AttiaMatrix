@@ -42,7 +42,7 @@
 
 // --- DEFAULT FALLBACKS ---
 #define DEFAULT_STOCKS "AAPL,MSFT,GOOG,TSLA"
-#define DEFAULT_API_KEY "" // Finnhub free key
+#define DEFAULT_API_KEY "d8bnp4pr01qkc5gcnpmgd8bnp4pr01qkc5gcnpn0" // Finnhub free key
 #define DEFAULT_TZ "EST5EDT,M3.2.0,M11.1.0" // Eastern Time
 
 // --- ACCESS POINT CONFIG ---
@@ -51,6 +51,7 @@
 
 // --- SYSTEM STATE ---
 enum SystemState {
+  STATE_BOOT_SPACE_INVADER,
   STATE_BOOT_ANIMATION,
   STATE_WIFI_SETUP,
   STATE_CONNECTING_WIFI,
