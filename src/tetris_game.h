@@ -216,11 +216,12 @@ private:
           _field[x][0] = 0;
         }
         
-        // Level up every 3 lines
-        if (_score % 3 == 0) {
+        // Level up every 2 lines (faster than traditional Tetris, since our
+        // 8-row-tall matrix gives far less reaction time per level already)
+        if (_score % 2 == 0) {
           _level++;
-          // Exponential speed scaling (0.84 feel)
-          _speed = _baseSpeed * pow(0.84, _level);
+          // Steeper exponential speed scaling (0.78 vs the traditional ~0.84 feel)
+          _speed = _baseSpeed * pow(0.78, _level);
           if (_speed < _minSpeed) _speed = _minSpeed;
           
           // Flash display intensity as visual feedback
