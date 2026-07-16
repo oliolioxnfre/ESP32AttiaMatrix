@@ -37,8 +37,6 @@ private:
   Digit _digits[6]; // H2, H1, M2, M1, S2, S1
   bool _scrollingUp;
   uint32_t _lastTickTime;
-  bool _colonState;
-  uint32_t _lastColonTime;
   int16_t _zPosX;
 
   int getFontIndex(char ch) {
@@ -74,9 +72,7 @@ private:
 public:
   ClockScreen() : 
     _scrollingUp(false), // Default to scroll down
-    _lastTickTime(0), 
-    _colonState(true), 
-    _lastColonTime(0),
+    _lastTickTime(0),
     _zPosX(56) {
     reset();
   }
@@ -107,8 +103,6 @@ public:
       _digits[i].yOffset = 0;
     }
     _lastTickTime = millis();
-    _colonState = true;
-    _lastColonTime = millis();
   }
 
   void update(MD_MAX72XX* mx) {
@@ -169,13 +163,7 @@ public:
       }
     }
 
-    // 3. Blink colons every 500ms
-    if (now - _lastColonTime >= 500) {
-      _lastColonTime = now;
-      _colonState = !_colonState;
-    }
-
-    // 4. Draw frame atomically using offscreen buffering
+    // 3. Draw frame atomically using offscreen buffering
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
     mx->clear();
 
@@ -202,11 +190,9 @@ public:
       }
     }
 
-    // Draw blinking colons
-    if (_colonState) {
-      drawDigit(mx, ':', _zPosX - 15, 0);
-      drawDigit(mx, ':', _zPosX - 32, 0);
-    }
+    // Draw static colons
+    drawDigit(mx, ':', _zPosX - 15, 0);
+    drawDigit(mx, ':', _zPosX - 32, 0);
 
     mx->control(MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
   }
