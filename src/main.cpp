@@ -360,7 +360,7 @@ void loop() {
         noTone(BUZZER_PIN);
         displayManager.clear();
         currentState = STATE_BOOT_ANIMATION;
-        displayManager.showScrollText("Hello, Mr Attia", 60);
+        displayManager.showScrollText("Hello, HUMAN", 60);
         Serial.println("Boot Space Invader done. Scrolling welcome message...");
       }
       break;

@@ -42,7 +42,7 @@
 
 // --- DEFAULT FALLBACKS ---
 #define DEFAULT_STOCKS "AAPL,MSFT,GOOG,TSLA"
-#define DEFAULT_API_KEY "d8bnp4pr01qkc5gcnpmgd8bnp4pr01qkc5gcnpn0" // Finnhub free key
+#define DEFAULT_API_KEY "" // No key ships with the firmware; enter your own Finnhub key in the setup portal
 #define DEFAULT_TZ "EST5EDT,M3.2.0,M11.1.0" // Eastern Time
 
 // --- ACCESS POINT CONFIG ---
